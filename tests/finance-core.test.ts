@@ -9,6 +9,7 @@ import { PicPayPdfParser } from "../src/parsers/picpay-pdf-parser.js";
 import { AliasesRepo } from "../src/repositories/aliases-repo.js";
 import { LearningRepo } from "../src/repositories/learning-repo.js";
 import { Categorizer } from "../src/services/categorizer.js";
+import { findDuplicate } from "../src/services/import-service.js";
 import { dueKeyboard, renderDueItems, type DueItem } from "../src/services/due-review.js";
 import type { ParsedTransaction } from "../src/types/finance.js";
 import { todayIso } from "../src/utils/dates.js";
@@ -222,6 +223,64 @@ describe("pdfs de cartao", () => {
     assert.equal(parsed[0].date, "2026-04-26");
     assert.equal(parsed[1].installments?.current, 1);
     assert.equal(parsed[1].installments?.total, 3);
+  });
+});
+
+describe("duplicidade em importacao", () => {
+  test("aceita data de fatura deslocada quando valor, cartao e descricao batem", () => {
+    const candidate: ParsedTransaction = {
+      type: "expense",
+      description: "Ortoart - Parcela 7/10",
+      amount_cents: -2600,
+      date: "2026-04-26",
+      credit_card_id: 20,
+      category_id: 100,
+      confidence: 0.95,
+      missing_fields: [],
+      source: "pdf"
+    };
+
+    const match = findDuplicate(candidate, [
+      {
+        id: 1,
+        date: "2026-05-12",
+        amount_cents: -2600,
+        description: "Ortoart",
+        account_id: 20,
+        account_type: "CreditCard",
+        credit_card_id: 20
+      }
+    ]);
+
+    assert.equal(match?.id, 1);
+  });
+
+  test("nao aceita data deslocada so por valor igual em outro cartao", () => {
+    const candidate: ParsedTransaction = {
+      type: "expense",
+      description: "Conta Vivo",
+      amount_cents: -4600,
+      date: "2026-05-18",
+      credit_card_id: 20,
+      category_id: 100,
+      confidence: 0.95,
+      missing_fields: [],
+      source: "pdf"
+    };
+
+    const match = findDuplicate(candidate, [
+      {
+        id: 1,
+        date: "2026-06-01",
+        amount_cents: -4600,
+        description: "Compra qualquer",
+        account_id: 21,
+        account_type: "CreditCard",
+        credit_card_id: 21
+      }
+    ]);
+
+    assert.equal(match, undefined);
   });
 });
 
