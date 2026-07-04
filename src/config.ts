@@ -39,11 +39,19 @@ export const config = {
     creditCardId: optionalNumber(process.env.DEFAULT_CREDIT_CARD_ID),
     categoryId: optionalNumber(process.env.DEFAULT_CATEGORY_ID)
   },
-  organizze: {
-    email: required("ORGANIZZE_EMAIL"),
-    token: required("ORGANIZZE_TOKEN", "ORGANIZZE_API_KEY"),
-    baseUrl: process.env.ORGANIZZE_BASE_URL?.trim() || "https://api.organizze.com.br/rest/v2",
-    userAgent: required("ORGANIZZE_USER_AGENT")
+  financeBackend: (process.env.FINANCE_BACKEND?.trim().toLowerCase() || "organizze") as "organizze" | "fincontrol",
+  organizze: process.env.FINANCE_BACKEND?.trim().toLowerCase() === "fincontrol"
+    ? { email: "", token: "", baseUrl: "", userAgent: "" }
+    : {
+        email: required("ORGANIZZE_EMAIL"),
+        token: required("ORGANIZZE_TOKEN", "ORGANIZZE_API_KEY"),
+        baseUrl: process.env.ORGANIZZE_BASE_URL?.trim() || "https://api.organizze.com.br/rest/v2",
+        userAgent: required("ORGANIZZE_USER_AGENT")
+      },
+  fincontrol: {
+    baseUrl: process.env.FINCONTROL_API_URL?.trim() || "http://localhost:5068/api",
+    email: process.env.FINCONTROL_EMAIL?.trim() || "",
+    password: process.env.FINCONTROL_PASSWORD?.trim() || ""
   },
   openRouter: {
     apiKey: process.env.OPENROUTER_API_KEY?.trim(),

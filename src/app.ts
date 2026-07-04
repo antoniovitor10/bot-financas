@@ -9,6 +9,7 @@ import { MultiTextParser } from "./parsers/multi-text-parser.js";
 import { VoiceParser } from "./parsers/voice-parser.js";
 import { LoanParser } from "./parsers/loan-parser.js";
 import { OrganizzeApiService } from "./services/organizze-api.js";
+import { FinControlApiService } from "./services/fincontrol-api.js";
 import { Categorizer } from "./services/categorizer.js";
 import { ConfirmationService } from "./services/confirmation.js";
 import { TranscriptionService } from "./services/transcription.js";
@@ -28,7 +29,12 @@ aliasesRepo.migrate();
 learningRepo.migrate();
 pendingRepo.migrate();
 
-const organizzeApi = new OrganizzeApiService(config.organizze);
+// Backend financeiro: Organizze (padrão) ou FinControl via FINANCE_BACKEND=fincontrol.
+// O adaptador FinControl implementa a mesma interface pública do serviço Organizze.
+const organizzeApi = config.financeBackend === "fincontrol"
+  ? (new FinControlApiService(config.fincontrol) as unknown as OrganizzeApiService)
+  : new OrganizzeApiService(config.organizze);
+logger.info(`backend financeiro: ${config.financeBackend}`);
 const textParser = new TextParser();
 const multiTextParser = new MultiTextParser(textParser);
 const loanParser = new LoanParser();
