@@ -11,10 +11,13 @@ export interface CategorizerDefaults {
 const CATEGORY_INTENT_ALIASES: Array<[RegExp, string]> = [
   [/\b(emprestei|emprestado|emprestada|emprestimo|emprestimos)\b/i, "emprestimos"],
   [/\b(mercado|supermercado|compras do mes|feira)\b/i, "mercado"],
-  [/\b(uber|99|taxi|transporte|onibus|metro|viacao|rota transport)\b/i, "transporte"],
+  [/\b(shein|lojas?|amazon|amazonmktplc|mundo dos|mundodos|rede jg avenida)\b/i, "compras"],
+  [/\b(uber|99|taxi|transporte|onibus|metro|viacao|rota transport|posto|gasolina|combustivel)\b/i, "transporte"],
   [/\b(ifood|restaurante|lanche|lanchonete|hamburguer|burger|almoco|jantar|acai|sorvete)\b/i, "alimentacao"],
-  [/\b(netflix|spotify|assinatura|anthropic|claude|google cloud|hostgator)\b/i, "assinaturas"],
-  [/\b(farmacia|remedio|consulta|medico|dentista|odonto|saude)\b/i, "saude"]
+  [/\b(netflix|spotify|apple|apple com|bill|assinatura|anthropic|claude|google cloud|hostgator|wellhub)\b/i, "assinaturas"],
+  [/\b(vivo|claro|tim|internet|energia|agua|luz)\b/i, "casa"],
+  [/\b(farmacia|drogaria|remedio|consulta|medico|dentista|dental|odonto|saude)\b/i, "saude"],
+  [/\b(salao|beleza|barbearia|esmalteria|manicure)\b/i, "cuidados pessoais"]
 ];
 
 export class Categorizer {

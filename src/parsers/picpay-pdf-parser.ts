@@ -118,7 +118,7 @@ function cleanupDescription(description: string): string {
 
 function inferCategoryHint(description: string): string {
   const normalized = description.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-  if (/\b(hostgator|google cloud|claude|anthropic|netflix|subscription)\b/.test(normalized)) return "assinaturas e servicos";
+  if (/\b(hostgator|google cloud|claude|anthropic|netflix|subscription|wellhub)\b/.test(normalized)) return "assinaturas e servicos";
   if (/\b(dom burguer|burger|coffee|ifd|acaiteria|mercadinho|merkado|queijo|sorvetes|brasa)\b/.test(normalized)) return "alimentacao";
   if (/\b(rota transport|viacao|aguia branca|uber)\b/.test(normalized)) return "transporte";
   if (/\b(farmacia|pague menos|odontomaster)\b/.test(normalized)) return "saude";

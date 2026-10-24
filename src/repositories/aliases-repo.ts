@@ -99,6 +99,7 @@ export class AliasesRepo {
         this.upsertCatalogItem("category", category.id, category.name, category);
         this.upsertAlias("category", category.name, category.id, category.name);
         for (const token of tokens(category.name).filter(meaningfulToken)) {
+          if (this.findAlias("category", token)) continue;
           this.upsertAlias("category", token, category.id, category.name);
         }
       }
