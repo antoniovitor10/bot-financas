@@ -46,6 +46,10 @@ Para voz, configure `OPENROUTER_API_KEY` ou `OPENAI_API_KEY`. O bot envia audio 
 - `/editar_conta ID nome=Novo Nome tipo=checking descricao=Texto` edita conta no Organizze.
 - `/editar_cartao ID nome=PicPay vencimento=5 fechamento=29 limite=6700 bandeira=mastercard` edita cartao no Organizze.
 - `/ajustar conta caixa para 1000 categoria outros` cria um lancamento de ajuste para acertar saldo.
+- `/pluggy` busca transacoes novas nos bancos ligados via Pluggy e monta um lote para revisao (mesmo fluxo de OFX/PDF).
+- `/pluggy contas` lista as contas da Pluggy e para qual conta/cartao do backend cada uma vai.
+- `/pluggy mapear PREFIXO conta|cartao ID_OU_NOME` liga uma conta Pluggy ao backend; `/pluggy mapear PREFIXO ignorar` deixa de ler.
+- `/pluggy status` mostra ultima sincronizacao e contagens.
 
 Comandos sao sensiveis a caixa: use `/sync`, nao `/Sync`.
 
@@ -79,6 +83,10 @@ Para testar importacao, envie no Telegram um arquivo `.ofx`, `.csv`, `.pdf` ou u
 CSV e OFX sao processados localmente. PDF de fatura Nubank e PicPay digitais tambem sao processados localmente para evitar custo e erro de OCR. Outros PDFs e imagens usam OpenRouter e retornam um lote de revisao, sem gravar automaticamente no Organizze.
 
 Audio pode conter mais de uma transacao. O bot transcreve, tenta extrair todas as transacoes via OpenRouter e envia cada uma para confirmacao individual. Frases com `emprestei` viram uma operacao composta: saida paga agora e conta a receber futura.
+
+## Pluggy (Open Finance)
+
+Com `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` e `PLUGGY_ITEMS` no `.env`, o bot le as transacoes dos bancos conectados no Meu Pluggy. O sync roda 20 s depois de subir e a cada `PLUGGY_SYNC_MINUTES`; o resultado vai para `PLUGGY_NOTIFY_CHAT_ID` so quando ha lote novo, conta sem mapeamento ou erro. Nada e gravado no backend sem o botao `Confirmar prontos` do lote. Transacoes antes de `PLUGGY_START_DATE` sao ignoradas; parcelas com data futura ficam guardadas e entram no lote quando a data chega. Detalhes e fatos da API em `docs/PLANO-PLUGGY.md`.
 
 ## Fluxo MVP
 

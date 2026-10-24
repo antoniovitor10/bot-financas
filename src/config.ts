@@ -18,6 +18,29 @@ function optionalNumberList(value: string | undefined): number[] {
     .filter((item) => Number.isFinite(item));
 }
 
+function parsePluggyItems(value: string | undefined): Array<{ id: string; name: string }> {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [id, ...rest] = item.split("=");
+      const name = rest.join("=").trim();
+      return { id: id.trim(), name: name || id.trim().slice(0, 8) };
+    })
+    .filter((item) => item.id.length > 0);
+}
+
+function optionalIsoDate(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new Error(`PLUGGY_START_DATE deve estar no formato YYYY-MM-DD (recebido: ${trimmed})`);
+  }
+  return trimmed;
+}
+
 function required(name: string, fallbackName?: string): string {
   const value = process.env[name] || (fallbackName ? process.env[fallbackName] : undefined);
   if (!value || value.trim().length === 0) {
@@ -65,6 +88,16 @@ export const config = {
       .split(",")
       .map((engine) => engine.trim())
       .filter(Boolean)
+  },
+  pluggy: {
+    clientId: process.env.PLUGGY_CLIENT_ID?.trim() || "",
+    clientSecret: process.env.PLUGGY_CLIENT_SECRET?.trim() || "",
+    items: parsePluggyItems(process.env.PLUGGY_ITEMS),
+    // Data de corte: antes dela a Pluggy nao gera lote (ja foi lancado a mao).
+    startDate: optionalIsoDate(process.env.PLUGGY_START_DATE),
+    syncMinutes: optionalNumber(process.env.PLUGGY_SYNC_MINUTES) ?? 180,
+    notifyChatId: optionalNumber(process.env.PLUGGY_NOTIFY_CHAT_ID),
+    enabled: !!(process.env.PLUGGY_CLIENT_ID?.trim() && process.env.PLUGGY_CLIENT_SECRET?.trim() && parsePluggyItems(process.env.PLUGGY_ITEMS).length > 0)
   },
   transcription: {
     provider: process.env.TRANSCRIPTION_PROVIDER?.trim() || "openrouter",

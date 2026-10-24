@@ -5,6 +5,7 @@ import type { AliasesRepo } from "../../repositories/aliases-repo.js";
 import type { LearningRepo } from "../../repositories/learning-repo.js";
 import type { Categorizer } from "../../services/categorizer.js";
 import type { OrganizzeApiService } from "../../services/organizze-api.js";
+import type { PluggyRepo } from "../../repositories/pluggy-repo.js";
 import type { ParsedTransaction } from "../../types/finance.js";
 import type { OrganizzeTransactionCreatePayload } from "../../types/organizze.js";
 import { formatBRL } from "../../utils/money.js";
@@ -25,6 +26,7 @@ interface CallbackDeps {
   learningRepo: LearningRepo;
   categorizer: Categorizer;
   syncCatalog: () => Promise<void>;
+  pluggyRepo?: PluggyRepo;
 }
 
 export function registerCallbackHandlers(bot: Telegraf, deps: CallbackDeps): void {
@@ -109,6 +111,7 @@ export function registerCallbackHandlers(bot: Telegraf, deps: CallbackDeps): voi
         candidate.status = "imported";
         candidate.reason = `Importado no Organizze: #${created.id}`;
         candidate.matched_transaction_id = created.id;
+        if (candidate.pluggy_id) deps.pluggyRepo?.markImported(candidate.pluggy_id, created.id);
         deps.learningRepo.learn(candidate.transaction);
         createdCount += 1;
       }

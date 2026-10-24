@@ -1,5 +1,5 @@
 export type TransactionType = "expense" | "income";
-export type TransactionSource = "text" | "voice" | "ofx" | "csv" | "pdf" | "image";
+export type TransactionSource = "text" | "voice" | "ofx" | "csv" | "pdf" | "image" | "pluggy";
 export type AliasKind = "account" | "credit_card" | "category";
 export type Periodicity = "monthly" | "yearly" | "weekly" | "biweekly" | "bimonthly" | "trimonthly";
 
@@ -79,6 +79,7 @@ export interface ImportCandidate {
   reason?: string;
   matched_transaction_id?: number;
   ofx_fit_id?: string;
+  pluggy_id?: string;
 }
 
 export interface ImportBatch {

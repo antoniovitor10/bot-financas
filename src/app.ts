@@ -4,6 +4,7 @@ import { openDatabase } from "./repositories/db.js";
 import { AliasesRepo } from "./repositories/aliases-repo.js";
 import { LearningRepo } from "./repositories/learning-repo.js";
 import { PendingRepo } from "./repositories/pending-repo.js";
+import { PluggyRepo } from "./repositories/pluggy-repo.js";
 import { TextParser } from "./parsers/text-parser.js";
 import { MultiTextParser } from "./parsers/multi-text-parser.js";
 import { VoiceParser } from "./parsers/voice-parser.js";
@@ -15,19 +16,25 @@ import { ConfirmationService } from "./services/confirmation.js";
 import { TranscriptionService } from "./services/transcription.js";
 import type { ImportService } from "./services/import-service.js";
 import { OpenRouterImportService } from "./services/openrouter-import.js";
+import { PluggyApiService } from "./services/pluggy-api.js";
+import { PluggySyncService } from "./services/pluggy-sync.js";
 import { registerTextHandlers } from "./bot/handlers/text.js";
 import { registerVoiceHandlers } from "./bot/handlers/voice.js";
 import { registerDocumentHandlers } from "./bot/handlers/document.js";
 import { registerCallbackHandlers } from "./bot/handlers/callback.js";
+import { registerPluggyHandlers, sendSyncResult } from "./bot/handlers/pluggy.js";
+import { todayIso } from "./utils/dates.js";
 import { logger } from "./utils/logger.js";
 
 const db = openDatabase(config.databasePath);
 const aliasesRepo = new AliasesRepo(db);
 const learningRepo = new LearningRepo(db);
 const pendingRepo = new PendingRepo(db);
+const pluggyRepo = new PluggyRepo(db);
 aliasesRepo.migrate();
 learningRepo.migrate();
 pendingRepo.migrate();
+pluggyRepo.migrate();
 
 // Backend financeiro: Organizze (padrão) ou FinControl via FINANCE_BACKEND=fincontrol.
 // O adaptador FinControl implementa a mesma interface pública do serviço Organizze.
@@ -51,6 +58,32 @@ const openRouterImport = new OpenRouterImportService({
   pdfFallbackEngines: config.openRouter.pdfFallbackEngines,
   requestTimeoutMs: config.openRouter.requestTimeoutMs
 });
+// Pluggy (Open Finance): le as transacoes dos bancos e monta lotes para revisao.
+// Nunca fala com o backend direto: entrega para a mesma camada dos lotes de OFX/PDF.
+let pluggySync: PluggySyncService | undefined;
+if (config.pluggy.enabled) {
+  const pluggyStartDate = config.pluggy.startDate ?? todayIso();
+  if (!config.pluggy.startDate) {
+    logger.warn("PLUGGY_START_DATE nao definido; usando hoje como data de corte", { startDate: pluggyStartDate });
+  }
+  pluggySync = new PluggySyncService(
+    {
+      api: new PluggyApiService({ clientId: config.pluggy.clientId, clientSecret: config.pluggy.clientSecret }),
+      repo: pluggyRepo,
+      aliasesRepo,
+      categorizer,
+      pendingRepo,
+      organizzeApi
+    },
+    {
+      items: [...config.pluggy.items],
+      startDate: pluggyStartDate,
+      confidenceThreshold: config.confidenceThreshold
+    }
+  );
+  logger.info("Pluggy habilitada", { items: config.pluggy.items.map((item) => item.name), startDate: pluggyStartDate });
+}
+
 let importServicePromise: Promise<ImportService> | undefined;
 
 function getImportService(): Promise<ImportService> {
@@ -118,8 +151,11 @@ registerCallbackHandlers(bot, {
   aliasesRepo,
   learningRepo,
   categorizer,
-  syncCatalog
+  syncCatalog,
+  pluggyRepo
 });
+// Antes dos handlers de texto: o handler generico de texto nao repassa comandos.
+registerPluggyHandlers(bot, { pluggySync, pluggyRepo, aliasesRepo });
 registerTextHandlers(bot, {
   textParser,
   loanParser,
@@ -146,6 +182,23 @@ setInterval(
   },
   config.catalogRefreshMinutes * 60 * 1000
 ).unref();
+
+const pluggyChatId = config.pluggy.notifyChatId ?? config.allowedTelegramUserIds[0];
+if (pluggySync && pluggyChatId) {
+  const sync = pluggySync;
+  const runScheduledPluggySync = async () => {
+    try {
+      const result = await sync.sync({ chatId: pluggyChatId });
+      await sendSyncResult(bot.telegram, pluggyChatId, result, { quiet: true });
+    } catch (error) {
+      logger.error("Scheduled Pluggy sync failed", { error: (error as Error).message });
+    }
+  };
+  setTimeout(runScheduledPluggySync, 20_000).unref();
+  setInterval(runScheduledPluggySync, config.pluggy.syncMinutes * 60 * 1000).unref();
+} else if (pluggySync) {
+  logger.warn("Pluggy sem chat para avisar: defina PLUGGY_NOTIFY_CHAT_ID ou ALLOWED_TELEGRAM_USER_IDS. Use /pluggy manualmente.");
+}
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
