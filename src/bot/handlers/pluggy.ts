@@ -144,7 +144,7 @@ const KIND_WORDS: Record<string, PluggyMapKind> = {
 
 export function renderSyncResult(result: PluggySyncResult): string {
   const lines = [
-    `Pluggy: ${result.accounts} contas lidas | novas: ${result.candidates} | futuras adiadas: ${result.deferred} | antes do corte: ${result.ignored} | ja conhecidas: ${result.alreadyKnown}`
+    `Pluggy: ${result.accounts} contas lidas | novas: ${result.candidates} | futuras adiadas: ${result.deferred} | antes do corte: ${result.ignored} | ja conhecidas: ${result.alreadyKnown + result.alreadyImported}`
   ];
   if (result.unmapped.length) {
     lines.push(

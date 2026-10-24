@@ -271,6 +271,8 @@ export interface PluggySyncResult {
   deferred: number;
   ignored: number;
   alreadyKnown: number;
+  /** Ja estavam no backend com "Pluggy <id>" nas notas (importadas por outro caminho). */
+  alreadyImported: number;
   unmapped: PluggyUnmappedAccount[];
   errors: Array<{ scope: string; message: string }>;
 }
@@ -384,6 +386,7 @@ export class PluggySyncService {
       deferred: 0,
       ignored: 0,
       alreadyKnown: 0,
+      alreadyImported: 0,
       unmapped: [],
       errors: []
     };
@@ -493,7 +496,7 @@ export class PluggySyncService {
 
     const parsed = candidates.map((candidate) => ({
       candidate,
-      transaction: this.enrich(toParsedTransaction(candidate.tx, candidate.account, candidate.map), candidate.map)
+      transaction: this.enrichParsed(toParsedTransaction(candidate.tx, candidate.account, candidate.map), candidate.map)
     }));
 
     const dates = parsed.map((item) => item.transaction.date as string).sort();
@@ -504,8 +507,37 @@ export class PluggySyncService {
       result.errors.push({ scope: "backend", message: `Nao consegui conferir duplicados: ${(error as Error).message}` });
     }
 
+    // Quem ja foi gravado no backend por este bot (ou por um script) leva
+    // "Pluggy <id>" nas notas. Isso vale em qualquer banco local, entao serve
+    // para nao reimportar depois de trocar de maquina ou apagar o SQLite.
+    const importedByNote = new Map<string, number>();
+    for (const tx of existing) {
+      const match = /Pluggy ([0-9a-f-]{20,})/i.exec(tx.notes || "");
+      if (match) importedByNote.set(match[1].toLowerCase(), tx.id);
+    }
+    const remaining = parsed.filter(({ candidate, transaction }) => {
+      const backendId = importedByNote.get(candidate.tx.id.toLowerCase());
+      if (backendId === undefined) return true;
+      this.deps.repo.recordTransaction({
+        pluggyId: candidate.tx.id,
+        accountId: candidate.accountId,
+        date: transaction.date as string,
+        amountCents: transaction.amount_cents as number,
+        description: transaction.description || "",
+        status: "imported",
+        pluggyStatus: candidate.tx.status,
+        pluggyCreatedAt: candidate.tx.createdAt,
+        payload: candidate.tx
+      });
+      this.deps.repo.markImported(candidate.tx.id, backendId);
+      result.alreadyImported += 1;
+      return false;
+    });
+    result.candidates = remaining.length;
+    if (remaining.length === 0) return result;
+
     const threshold = this.options.confidenceThreshold ?? 0.85;
-    const importCandidates: ImportCandidate[] = parsed.map(({ candidate, transaction }) => {
+    const importCandidates: ImportCandidate[] = remaining.map(({ candidate, transaction }) => {
       const duplicate = findDuplicate(transaction, existing);
       if (duplicate) {
         return {
@@ -558,7 +590,7 @@ export class PluggySyncService {
       candidates: importCandidates
     });
 
-    for (const { candidate, transaction } of parsed) {
+    for (const { candidate, transaction } of remaining) {
       if (candidate.known) continue;
       this.deps.repo.recordTransaction({
         pluggyId: candidate.tx.id,
@@ -574,7 +606,7 @@ export class PluggySyncService {
       });
     }
     this.deps.repo.markBatched(
-      parsed.filter((item) => item.candidate.known).map((item) => item.candidate.tx.id),
+      remaining.filter((item) => item.candidate.known).map((item) => item.candidate.tx.id),
       batch.id
     );
 
@@ -587,7 +619,7 @@ export class PluggySyncService {
    * e depois reforca o destino do mapeamento: a descricao pode citar outro
    * banco ("Pix para Nubank") e nao pode mudar a conta de origem.
    */
-  private enrich(parsed: ParsedTransaction, map: PluggyAccountMap): ParsedTransaction {
+  enrichParsed(parsed: ParsedTransaction, map: PluggyAccountMap): ParsedTransaction {
     // O Categorizer junta raw_text + description; entregamos a descricao sem o
     // jargao de extrato e devolvemos a original depois.
     const enriched = this.deps.categorizer.enrich({

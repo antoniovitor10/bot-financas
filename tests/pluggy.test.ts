@@ -302,7 +302,10 @@ describe("pluggy: sincronizacao", () => {
     const { api, requests } = fakeApi({
       accounts: { "item-nubank": [cardAccount], "item-caixa": [bankAccount, savingsAccount] },
       transactions: {
-        "acc-card": [cardTx({ id: "dup", description: "Uber", category: "Taxi and ride-hailing", amount: 24.92, date: "2026-10-18T21:04:26.051Z" })],
+        "acc-card": [
+          cardTx({ id: "dup", description: "Uber", category: "Taxi and ride-hailing", amount: 24.92, date: "2026-10-18T21:04:26.051Z" }),
+          cardTx({ id: "aaaaaaaa-0000-4000-8000-000000000001", description: "Netflix", category: "Streaming", amount: 55.9, date: "2026-10-19T00:00:00.000Z" })
+        ],
         "acc-savings": [cardTx({ id: "poupanca", accountId: "acc-savings", amount: -1, creditCardMetadata: null })]
       }
     });
@@ -319,6 +322,20 @@ describe("pluggy: sincronizacao", () => {
       account_type: "CreditCard",
       category_id: 101,
       credit_card_id: 20
+    }, {
+      id: 1000,
+      description: "Netflix",
+      date: "2026-10-19",
+      paid: true,
+      amount_cents: -5590,
+      total_installments: 1,
+      installment: 1,
+      recurring: false,
+      account_id: 20,
+      account_type: "CreditCard",
+      category_id: 102,
+      credit_card_id: 20,
+      notes: "Pluggy aaaaaaaa-0000-4000-8000-000000000001 | Nubank cartao | Streaming"
     }];
     const { service } = makeService(ctx, api, { today: "2026-10-24", existing });
 
@@ -326,8 +343,12 @@ describe("pluggy: sincronizacao", () => {
 
     assert.equal(result.unmapped.length, 0);
     assert.ok(!requests.some((request) => request.accountId === "acc-savings"));
+    assert.equal(result.batch?.candidates.length, 1);
     assert.equal(result.batch?.candidates[0]?.status, "duplicate");
     assert.equal(result.batch?.candidates[0]?.matched_transaction_id, 999);
+    assert.equal(result.alreadyImported, 1);
+    assert.equal(ctx.pluggy.getTransaction("aaaaaaaa-0000-4000-8000-000000000001")?.status, "imported");
+    assert.equal(ctx.pluggy.getTransaction("aaaaaaaa-0000-4000-8000-000000000001")?.backend_tx_id, 1000);
   });
 
   test("repo: marca importada e conta por status", () => {

@@ -77,6 +77,16 @@ export interface OrganizzeAccountUpdatePayload {
   default?: boolean;
 }
 
+export interface OrganizzeCreditCardCreatePayload {
+  name: string;
+  description?: string | null;
+  card_network?: string | null;
+  closing_day: number;
+  due_day: number;
+  limit_cents?: number;
+  default?: boolean;
+}
+
 export interface OrganizzeCreditCardUpdatePayload {
   name?: string;
   description?: string | null;

@@ -4,6 +4,7 @@ import type {
   OrganizzeCategory,
   OrganizzeCategoryCreatePayload,
   OrganizzeCreditCard,
+  OrganizzeCreditCardCreatePayload,
   OrganizzeCreditCardInvoice,
   OrganizzeCreditCardUpdatePayload,
   OrganizzeAccountUpdatePayload,
@@ -72,6 +73,10 @@ export class OrganizzeApiService {
     });
   }
 
+  async deleteTransaction(id: number): Promise<void> {
+    await this.request<unknown>(`/transactions/${id}`, { method: "DELETE" });
+  }
+
   async createCategory(payload: OrganizzeCategoryCreatePayload): Promise<OrganizzeCategory> {
     return this.request<OrganizzeCategory>("/categories", {
       method: "POST",
@@ -82,6 +87,13 @@ export class OrganizzeApiService {
   async updateAccount(id: number, payload: OrganizzeAccountUpdatePayload): Promise<OrganizzeAccount> {
     return this.request<OrganizzeAccount>(`/accounts/${id}`, {
       method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async createCreditCard(payload: OrganizzeCreditCardCreatePayload): Promise<OrganizzeCreditCard> {
+    return this.request<OrganizzeCreditCard>("/credit_cards", {
+      method: "POST",
       body: JSON.stringify(payload)
     });
   }
@@ -122,6 +134,8 @@ export class OrganizzeApiService {
       throw new Error(`Organizze API ${response.status} ${response.statusText}: ${body}`);
     }
 
-    return (await response.json()) as T;
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 }
