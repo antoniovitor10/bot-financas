@@ -261,7 +261,7 @@ export class PluggyRepo {
       .all(todayIso) as TrackedRow[]).map(toTracked);
   }
 
-  /** Transacoes ignoradas por estarem antes do corte, caso o corte tenha recuado. */
+  /** Transacoes ignoradas por estarem antes do corte, caso o corte tenha recuado. Descartadas ("skipped") nunca voltam. */
   listIgnoredSince(startDateIso: string): PluggyTrackedTransaction[] {
     return (this.db
       .prepare("SELECT * FROM pluggy_transactions WHERE status = 'ignored' AND date >= ? ORDER BY date")

@@ -81,7 +81,11 @@ export interface PluggyAccountMap {
   updated_at: string;
 }
 
-export type PluggyTrackedStatus = "deferred" | "ignored" | "batched" | "imported";
+/**
+ * deferred: data futura, entra quando chegar | ignored: antes da data de corte (volta se o corte recuar)
+ * skipped: descartada por regra ou pelo Vitor (nao volta) | batched: em lote | imported: gravada no backend
+ */
+export type PluggyTrackedStatus = "deferred" | "ignored" | "skipped" | "batched" | "imported";
 
 export interface PluggyTrackedTransaction {
   pluggy_id: string;

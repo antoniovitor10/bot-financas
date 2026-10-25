@@ -10,7 +10,9 @@ import type {
   OrganizzeAccountUpdatePayload,
   OrganizzeTransaction,
   OrganizzeTransactionCreatePayload,
-  OrganizzeTransactionUpdatePayload
+  OrganizzeTransactionUpdatePayload,
+  OrganizzeTransfer,
+  OrganizzeTransferCreatePayload
 } from "../types/organizze.js";
 
 export interface OrganizzeApiOptions {
@@ -73,8 +75,29 @@ export class OrganizzeApiService {
     });
   }
 
-  async deleteTransaction(id: number): Promise<void> {
-    await this.request<unknown>(`/transactions/${id}`, { method: "DELETE" });
+  /** `update_future` apaga esta e as proximas ocorrencias de uma fixa ou parcelamento; `update_all`, todas. */
+  async deleteTransaction(id: number, options: { update_future?: boolean; update_all?: boolean } = {}): Promise<void> {
+    const body = options.update_future || options.update_all ? JSON.stringify(options) : undefined;
+    await this.request<unknown>(`/transactions/${id}`, { method: "DELETE", ...(body ? { body } : {}) });
+  }
+
+  /** Transferencia entre contas (so contas; cartoes nao sao aceitos). Cria duas pernas no Organizze. */
+  async createTransfer(payload: OrganizzeTransferCreatePayload): Promise<OrganizzeTransfer> {
+    return this.request<OrganizzeTransfer>("/transfers", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateTransfer(id: number, payload: { description?: string; notes?: string; tags?: string[] }): Promise<OrganizzeTransfer> {
+    return this.request<OrganizzeTransfer>(`/transfers/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deleteTransfer(id: number): Promise<void> {
+    await this.request<unknown>(`/transfers/${id}`, { method: "DELETE" });
   }
 
   async createCategory(payload: OrganizzeCategoryCreatePayload): Promise<OrganizzeCategory> {

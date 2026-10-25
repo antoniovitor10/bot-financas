@@ -80,7 +80,7 @@ export function registerPluggyHandlers(bot: Telegraf, deps: PluggyHandlerDeps): 
           `Pluggy: ${deps.pluggySync.items.map((item) => item.name).join(", ")}.`,
           `Data de corte: ${deps.pluggySync.startDate}.`,
           `Ultima sincronizacao: ${lastSync ? lastSync.replace("T", " ").slice(0, 16) : "nunca"}.`,
-          `Transacoes: em lote ${counts.batched || 0} | importadas ${counts.imported || 0} | adiadas (futuras) ${counts.deferred || 0} | antes do corte ${counts.ignored || 0}.`,
+          `Transacoes: em lote ${counts.batched || 0} | importadas ${counts.imported || 0} | adiadas (futuras) ${counts.deferred || 0} | antes do corte ${counts.ignored || 0} | descartadas ${counts.skipped || 0}.`,
           withError.length ? `Contas com erro: ${withError.map((state) => `${state.account_id.slice(0, 8)}: ${state.last_error}`).join("; ")}` : ""
         ].filter(Boolean).join("\n"));
         return;
@@ -144,7 +144,7 @@ const KIND_WORDS: Record<string, PluggyMapKind> = {
 
 export function renderSyncResult(result: PluggySyncResult): string {
   const lines = [
-    `Pluggy: ${result.accounts} contas lidas | novas: ${result.candidates} | futuras adiadas: ${result.deferred} | antes do corte: ${result.ignored} | ja conhecidas: ${result.alreadyKnown + result.alreadyImported}`
+    `Pluggy: ${result.accounts} contas lidas | novas: ${result.candidates} | futuras adiadas: ${result.deferred} | antes do corte: ${result.ignored} | descartadas: ${result.skipped} | ja conhecidas: ${result.alreadyKnown + result.alreadyImported}`
   ];
   if (result.unmapped.length) {
     lines.push(

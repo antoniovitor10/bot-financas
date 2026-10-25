@@ -7,7 +7,8 @@ import { PendingRepo } from "../src/repositories/pending-repo.js";
 import { PluggyRepo } from "../src/repositories/pluggy-repo.js";
 import { Categorizer } from "../src/services/categorizer.js";
 import { PluggyApiService } from "../src/services/pluggy-api.js";
-import { PluggySyncService, stripBankBoilerplate, toParsedTransaction } from "../src/services/pluggy-sync.js";
+import { PluggySyncService, isCardInvoicePaymentLine, stripBankBoilerplate, toParsedTransaction } from "../src/services/pluggy-sync.js";
+import { findDuplicate } from "../src/services/duplicates.js";
 import type { PluggyAccount, PluggyTransaction } from "../src/types/pluggy.js";
 import type { OrganizzeTransaction } from "../src/types/organizze.js";
 
@@ -155,6 +156,25 @@ describe("pluggy: normalizacao", () => {
   });
 });
 
+describe("pluggy: pagamento de fatura e parcelas", () => {
+  test("pagamento recebido e saldo anterior no cartao sao linhas de fatura, nao lancamentos", () => {
+    assert.equal(isCardInvoicePaymentLine(cardTx({ description: "Pagamento recebido", amount: -1200, type: "CREDIT", category: "Credit card payment" }), "CREDIT"), true);
+    assert.equal(isCardInvoicePaymentLine(cardTx({ description: "TOTAL DA FATURA ANTERIOR", amount: 17.25, type: "DEBIT", category: "Other" }), "CREDIT"), true);
+    assert.equal(isCardInvoicePaymentLine(cardTx({ description: "PGTO.BOLETO REGISTRADO", amount: -17.25, type: "CREDIT", category: "Transfer - Bank Slip" }), "CREDIT"), true);
+    assert.equal(isCardInvoicePaymentLine(cardTx({ description: "Uber", category: "Taxi and ride-hailing" }), "CREDIT"), false);
+    assert.equal(isCardInvoicePaymentLine(cardTx({ description: "Pagamento de conta CARTOES CAIXA", category: "Bills" }), "BANK"), false);
+  });
+
+  test("parcela com diferenca de centavos e reconhecida como duplicada", () => {
+    const candidate = toParsedTransaction(cardTx({ description: "MP CONFIAUTOCARSERVIC MATA DE SAO J BRA", amount: 922.33, date: "2026-10-19T00:00:00.000Z" }), { type: "CREDIT", name: "x", itemName: "Inter" });
+    candidate.credit_card_id = 30;
+    const match = findDuplicate(candidate, [{ id: 1, date: "2026-10-19", amount_cents: -92234, description: "MP CONFIAUTOCARSERVIC - parcela 5/12", account_id: 30, account_type: "CreditCard", credit_card_id: 30 }]);
+    assert.equal(match?.id, 1);
+    const other = findDuplicate(candidate, [{ id: 2, date: "2026-10-19", amount_cents: -92234, description: "Supermercado Bom Preco", account_id: 30, account_type: "CreditCard", credit_card_id: 30 }]);
+    assert.equal(other, undefined, "descricao diferente e sem marca de parcela nao casa so por centavos");
+  });
+});
+
 describe("pluggy: cliente da API", () => {
   test("segue o cursor next (query string) e renova a apiKey em 401", async () => {
     const calls: string[] = [];
@@ -248,7 +268,8 @@ describe("pluggy: sincronizacao", () => {
     assert.equal(ctx.pluggy.getMap("acc-bank")?.target_id, 10);
     assert.equal(first.deferred, 1);
     assert.equal(first.ignored, 1);
-    assert.equal(first.candidates, 4);
+    assert.equal(first.skipped, 1, "pagamento de fatura dentro do cartao");
+    assert.equal(first.candidates, 3, (first.batch?.candidates || []).map((c) => c.pluggy_id).join(","));
     assert.ok(first.batch);
 
     const byId = new Map(first.batch!.candidates.map((candidate) => [candidate.pluggy_id, candidate]));
@@ -258,9 +279,8 @@ describe("pluggy: sincronizacao", () => {
     assert.equal(uber.transaction.category_id, 101);
     assert.equal(uber.transaction.amount_cents, -10068);
 
-    const fatura = byId.get("fatura")!;
-    assert.equal(fatura.status, "needs_review");
-    assert.match(fatura.reason || "", /Credit card payment/);
+    assert.equal(byId.has("fatura"), false, "pagamento de fatura nao entra no lote");
+    assert.equal(ctx.pluggy.getTransaction("fatura")?.status, "skipped");
 
     const pix = byId.get("pix")!;
     assert.equal(pix.transaction.account_id, 10);
@@ -276,7 +296,7 @@ describe("pluggy: sincronizacao", () => {
     assert.equal(ctx.pluggy.getTransaction("nova")?.status, "batched");
     assert.equal(ctx.pluggy.getTransaction("futura")?.status, "deferred");
     assert.equal(ctx.pluggy.getTransaction("antiga")?.status, "ignored");
-    assert.equal(ctx.pending.getImportBatch(first.batch!.id)?.candidates.length, 4);
+    assert.equal(ctx.pending.getImportBatch(first.batch!.id)?.candidates.length, 3);
 
     // Segunda rodada no mesmo dia: nada novo, usa createdAtFrom com sobreposicao.
     const second = await service.sync({ chatId: 1 });

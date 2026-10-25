@@ -64,12 +64,23 @@ Tudo que já foi lançado no Organizze (manual ou por extrato) vai chegar de nov
 - O que caiu em revisar: Pix entre contas próprias, Pix para pessoas, pagamentos de boleto/fatura e 43 itens sem categoria resolvida (descrições cruas de extrato como "DEB PIX CHAVE"). É o alvo da terceira camada (OpenRouter) ou de aliases/aprendizado com o uso.
 - Bug de ambiente achado e corrigido: better-sqlite3 11.10 trava com "Assertion failed: (env) != nullptr" no Node 24 sempre que um statement é coletado pelo GC. Atualizado para better-sqlite3 13.0.3 (package.json). Se o servidor roda Node 20/22, continua funcionando.
 
+## Primeira carga e licoes (24/10/2026)
+
+- Carga de 25/07 a 24/10 aplicada: 544 lancamentos no Organizze com "Pluggy <id>" nas notas, 83 descartados (duplicados, pagamentos de fatura, transferencias convertidas). Pagina de revisao: https://claude.ai/artifact/JuE76F8DQzSJBZk6ZxSiaE. Decisoes aplicadas por `scripts/pluggy-import-decisoes.ts`.
+- Cartao Caixa Visa (#2712414) e categoria "Nao identificado" criados no Organizze pela API.
+- Pagamento de fatura: a Pluggy lista "Pagamento recebido" / "TOTAL DA FATURA ANTERIOR" dentro do cartao. Isso NAO e lancamento (zera a fatura no Organizze). O sync agora descarta essas linhas (`isCardInvoicePaymentLine`). O pagamento fica so na conta de origem, categoria "Pagamento de fatura" (convencao do Vitor). A API nao cria "pagamento de fatura" ligado a fatura.
+- Parcelas: bancos arredondam diferente (922,33 x 922,34). `findDuplicate` aceita ate 5 centavos quando parece parcela ou a descricao bate.
+- Transferencias entre contas proprias: `POST /transfers` cria as duas pernas. Atencao: na API o campo `debit_account_id` e a conta que RECEBE e `credit_account_id` a que ENVIA (invertido do nome). O script de correcao conferiu lendo de volta. Cartoes nao entram em transferencias.
+- Status local: `ignored` so para antes do corte (volta se o corte recuar); `skipped` para descartadas por regra ou pelo Vitor (nunca volta).
+- PicPay: em outubro a Pluggy devolveu 4 compras do cartao embora o limite usado fosse R$ 6.722. Fatura do PicPay nao da para estimar pela Pluggy; usar o app. `GET /bills?accountId=` traz as faturas fechadas (total, vencimento, fechamento).
+- Pix crus da Caixa ("DEB PIX CHAVE") trazem a contraparte em `paymentData` (nome ou CPF/CNPJ). Usado na revisao para descricao e categoria; vale levar para o sync.
+
 ## Próximos passos
 
-1. Subir o bot com as variáveis novas (`PLUGGY_START_DATE`, `PLUGGY_NOTIFY_CHAT_ID`) e rodar `/pluggy contas` para conferir os mapeamentos automáticos e decidir as poupanças da Caixa (mapear ou ignorar).
-2. Rodar `/pluggy`, revisar o primeiro lote e confirmar. A partir daí o sync agendado só avisa quando há coisa nova.
-3. Depois de alguns lotes: medir quantos itens caem em "revisar" e, se valer, ligar a terceira camada (OpenRouter) para categorizar o que aliases e aprendizado não resolvem.
-4. Opcional: webhook `/webhooks/pluggy` disparando o mesmo sync; resumo diário no Telegram.
+1. Subir o bot com `PLUGGY_START_DATE=2026-07-25` e `PLUGGY_NOTIFY_CHAT_ID`; o banco local `data/bot-financas.sqlite` ja tem o estado da carga (se o bot rodar em outra maquina, copiar o SQLite ou confiar no dedupe pelas notas).
+2. Levar `paymentData` (contraparte do Pix) para a descricao e categorizacao no sync, como na revisao.
+3. Encerrar as despesas fixas manuais que a Pluggy ja cobre (entrada do apartamento, taxa do cartao Caixa, agua) para nao duplicar com os boletos reais.
+4. Depois de alguns lotes: medir "revisar" e, se valer, ligar OpenRouter para o que aliases e aprendizado nao resolvem. Opcional: webhook e resumo diario.
 
 ## Pendências do Vitor
 

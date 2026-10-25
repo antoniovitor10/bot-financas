@@ -31,6 +31,8 @@ export interface OrganizzeCreditCard {
 
 export interface OrganizzeTransaction {
   id: number;
+  oposite_transaction_id?: number | null;
+  oposite_account_id?: number | null;
   description: string;
   date: string;
   paid: boolean;
@@ -96,6 +98,30 @@ export interface OrganizzeCreditCardUpdatePayload {
   limit_cents?: number;
   archived?: boolean;
   default?: boolean;
+}
+
+export interface OrganizzeTransferCreatePayload {
+  /** Conta de onde o dinheiro sai. */
+  debit_account_id: number;
+  /** Conta onde o dinheiro entra. */
+  credit_account_id: number;
+  amount_cents: number;
+  date: string;
+  paid?: boolean;
+  description?: string;
+  notes?: string;
+  tags?: string[];
+}
+
+export interface OrganizzeTransfer {
+  id: number;
+  description?: string;
+  date: string;
+  amount_cents: number;
+  account_id?: number;
+  oposite_account_id?: number;
+  oposite_transaction_id?: number;
+  notes?: string | null;
 }
 
 export interface OrganizzeCreditCardInvoice {

@@ -49,12 +49,24 @@ function isSameCreditCard(transaction: ParsedTransaction, existing: ExistingTran
   );
 }
 
+const INSTALLMENT_MARK = /parcela|parc\s*\d+\/\d+|\b\d{1,2}\/\d{1,2}\b/i;
+
+/** Diferenca de ate 5 centavos e aceita quando os dois lados parecem a mesma parcela (bancos arredondam diferente). */
+function amountMatches(transaction: ParsedTransaction, existing: ExistingTransactionForDuplicate): boolean {
+  const amount = transaction.amount_cents as number;
+  if (existing.amount_cents === amount) return true;
+  if (Math.sign(existing.amount_cents) !== Math.sign(amount)) return false;
+  if (Math.abs(existing.amount_cents - amount) > 5) return false;
+  const installmentLike = INSTALLMENT_MARK.test(transaction.description || "") || INSTALLMENT_MARK.test(existing.description || "");
+  return installmentLike || descriptionSimilarity(existing.description, transaction.description) >= 0.5;
+}
+
 export function findDuplicate(transaction: ParsedTransaction, existing: ExistingTransactionForDuplicate[]) {
   if (!transaction.date || transaction.amount_cents === undefined) return undefined;
 
   return existing
     .filter((existingTransaction) => (
-      existingTransaction.amount_cents === transaction.amount_cents &&
+      amountMatches(transaction, existingTransaction) &&
       dateDistanceDays(existingTransaction.date, transaction.date as string) <= 21
     ))
     .map((existingTransaction) => ({

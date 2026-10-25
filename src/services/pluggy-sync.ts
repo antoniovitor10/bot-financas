@@ -101,6 +101,20 @@ const REVIEW_CATEGORIES = new Set([
   "pix"
 ]);
 
+/**
+ * No cartao, a Pluggy lista o pagamento da fatura ("Pagamento recebido") e o saldo
+ * anterior como se fossem transacoes. No Organizze isso nao e lancamento: a fatura
+ * e paga pela conta. Essas linhas sao ignoradas no sync.
+ */
+export function isCardInvoicePaymentLine(tx: PluggyTransaction, accountType: string): boolean {
+  if (accountType !== "CREDIT") return false;
+  const category = (tx.category || "").toLowerCase();
+  const description = (tx.description || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  if (/credit card (payment|bill)/.test(category)) return true;
+  if (/^(pagamento recebido|pagamento de fatura|pagamento efetuado|pgto\.? ?boleto registrado|total da fatura anterior|saldo anterior)/.test(description)) return true;
+  return false;
+}
+
 export interface PluggyAccountContext {
   type: string;
   name: string;
@@ -271,6 +285,8 @@ export interface PluggySyncResult {
   deferred: number;
   ignored: number;
   alreadyKnown: number;
+  /** Descartadas por regra (ex.: pagamento de fatura dentro do cartao). */
+  skipped: number;
   /** Ja estavam no backend com "Pluggy <id>" nas notas (importadas por outro caminho). */
   alreadyImported: number;
   unmapped: PluggyUnmappedAccount[];
@@ -386,6 +402,7 @@ export class PluggySyncService {
       deferred: 0,
       ignored: 0,
       alreadyKnown: 0,
+      skipped: 0,
       alreadyImported: 0,
       unmapped: [],
       errors: []
@@ -448,6 +465,11 @@ export class PluggySyncService {
           payload: tx
         };
 
+        if (isCardInvoicePaymentLine(tx, account.type)) {
+          this.deps.repo.recordTransaction({ ...base, status: "skipped" });
+          result.skipped += 1;
+          continue;
+        }
         if (date > today) {
           this.deps.repo.recordTransaction({ ...base, status: "deferred" });
           result.deferred += 1;

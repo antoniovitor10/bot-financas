@@ -5,7 +5,7 @@
  * <pasta>/decisoes/<pluggyId>.json, cada um com { action, category_id, dest_kind, dest_id, ... }).
  * Para cada decisao "lancar": cria a transacao no backend com "Pluggy <id>" nas notas,
  * marca como importada no SQLite do bot, atualiza o lote e alimenta o aprendizado.
- * Para "ignorar": marca a transacao local como ignorada (nao volta em lotes futuros).
+ * Para "ignorar": marca a transacao local como descartada (skipped; nao volta em lotes futuros).
  *
  * Uso (de dentro da pasta do projeto, le o .env):
  *   npx tsx scripts/pluggy-import-decisoes.ts <pasta-das-decisoes> [--apply] [--caixa-card=ID]
@@ -100,7 +100,7 @@ for (const [pluggyId, decision] of decisions) {
     if (apply && tracked) {
       pluggyRepo.recordTransaction({
         pluggyId, accountId: tracked.account_id, date: tracked.date, amountCents: tracked.amount_cents,
-        description: tracked.description, status: "ignored", pluggyStatus: tracked.pluggy_status,
+        description: tracked.description, status: "skipped", pluggyStatus: tracked.pluggy_status,
         pluggyCreatedAt: tracked.pluggy_created_at, payload: JSON.parse(tracked.payload_json)
       });
     }
