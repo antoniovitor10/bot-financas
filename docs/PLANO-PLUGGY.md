@@ -39,6 +39,14 @@ Implementado e testado (20 testes passando, `npm test`), ainda nao rodado em pro
 - O item no Demo não sincroniza sozinho (`nextAutoSyncAt` null é normal). Quem atualiza é a conexão original no Meu Pluggy, a cada 24h. `refresh` pela API não funciona para itens Meu Pluggy.
 - Webhook disponível (item/updated, transactions/created, transactions/updated, transactions/deleted). Exige URL pública HTTPS.
 
+## Fatos da API do Organizze (confirmados em 25/10/2026)
+
+- `PUT /transactions/:id` aceita `credit_card_invoice_id`: move o item para outra fatura do mesmo cartão sem mudar a data. É assim que os ciclos reais (scripts/ciclos-cartoes.ts) são aplicados.
+- `POST /credit_cards/:cartao/invoices/:fatura/payments` com `account_id`, `amount_cents` (negativo), `date`, `description` cria um pagamento ligado à fatura (vira transação na conta, categoria Pagamento de fatura, e zera `balance_cents`). Não está na documentação pública.
+- `PUT`/`POST /transactions` com `paid_credit_card_id` e `paid_credit_card_invoice_id` são ignorados: não dá para transformar uma transação existente em pagamento de fatura; é preciso apagar e recriar pelo endpoint acima.
+- `GET /credit_cards/:cartao/invoices/:fatura` traz `transactions` e `payments`; `balance_cents = amount + previous_balance - payment` (tudo negativo).
+- Em 25/10/2026 as faturas de ago a out foram conferidas com os extratos reais, pagamentos vinculados e linhas de acerto criadas (ver ai-memory decisions/faturas-organizze-corrigidas-2026-10).
+
 ## Arquitetura a implementar
 
 1. `src/services/pluggy-api.ts`: auth (cache da apiKey), getItem, listAccounts, listTransactions (v2, seguindo `next` até acabar).

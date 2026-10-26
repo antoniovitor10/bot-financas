@@ -3,29 +3,18 @@
  * gastos.json, receitas.json, lancamentos.json, faturas.json, vencimentos.json, nao-identificado.json.
  *
  * Uso: npx tsx scripts/painel-export.ts [pasta de saida]   (padrao: data/painel)
- * Regras combinadas com o Vitor em 24-25/10/2026 (ciclos dos cartoes e boletos previstos) ficam em CICLOS e PREVISTOS.
+ * Boletos previstos ficam em PREVISTOS; os ciclos reais das faturas estao em ciclos-cartoes.ts. Os valores das faturas sao os do Organizze.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "../src/config.js";
 import { OrganizzeApiService } from "../src/services/organizze-api.js";
 import type { OrganizzeTransaction } from "../src/types/organizze.js";
+import { cicloReal } from "./ciclos-cartoes.js";
 
 const INTERNAL = new Set(["Transferências", "Pagamento de fatura", "Investimentos"]);
 
-/** Ciclos de fatura que mudaram em outubro/2026 (vencimento novo): periodo real do app, nao o do Organizze. */
-const CICLOS: Record<string, { vence?: string; inicio?: string; fim?: string }> = {
-  "mercado pago 2026-11-04": { inicio: "2026-09-16" },
-  "mercado pago 2026-10-04": { fim: "2026-09-15" },
-  "pic pay 2026-10-15": { vence: "2026-10-05", inicio: "2026-08-30", fim: "2026-09-29" },
-  "pic pay 2026-11-15": { inicio: "2026-09-30", fim: "2026-11-08" },
-  "pic pay 2026-12-15": { inicio: "2026-11-09", fim: "2026-12-08" },
-  "pic pay 2027-01-15": { inicio: "2026-12-09", fim: "2027-01-08" },
-  "nu bank 2026-10-17": { vence: "2026-10-05", inicio: "2026-08-28", fim: "2026-09-25" },
-  "nu bank 2026-11-17": { inicio: "2026-09-26", fim: "2026-11-10" }
-};
-/** Cartoes cujo valor de fatura sai da soma dos itens do ciclo (os outros usam o valor do Organizze). */
-const RECALCULA = new Set(["mercado pago", "pic pay", "nu bank"]);
+/** Ciclos reais das faturas (so para exibir o periodo e o vencimento real): scripts/ciclos-cartoes.ts. */
 
 /** Boletos que se repetem todo mes e ainda nao estao lancados: descricao, valor, categoria, dia. */
 const PREVISTOS: Array<[string, number, string, number]> = [
@@ -73,17 +62,20 @@ export async function exportPainel(outDir: string, today = new Date().toISOStrin
   const seen = new Set<number>(); const txs = all.filter((t) => { if (seen.has(t.id)) return false; seen.add(t.id); return true; });
 
   // Faturas por cartao, com os ciclos corrigidos.
-  type Inv = { cartao: string; cartao_id: number; vence: string; inicio: string; fim: string; valor: number; pago: number };
+  type Inv = { id: number; cartao: string; cartao_id: number; vence: string; vence_real: string; inicio: string; fim: string; valor: number; pago: number; saldo: number };
   const invoices: Inv[] = [];
   for (const card of catalog.creditCards.filter((c) => !c.archived)) {
     const list = await o.listCreditCardInvoices(card.id, { start_date: start, end_date: end });
-    for (const inv of list) invoices.push({ cartao: card.name.trim(), cartao_id: card.id, vence: inv.date, inicio: inv.starting_date, fim: inv.closing_date, valor: Math.round(Math.abs(inv.amount_cents)) / 100, pago: Math.round(Math.abs(inv.payment_amount_cents)) / 100 });
+    for (const inv of list) {
+      const c = cicloReal(card.name, inv.date);
+      invoices.push({ id: inv.id, cartao: card.name.trim(), cartao_id: card.id, vence: inv.date, vence_real: c?.venceReal || inv.date, inicio: c?.inicio || inv.starting_date, fim: c?.fim || inv.closing_date, valor: Math.round(Math.abs(inv.amount_cents)) / 100, pago: Math.round(Math.abs(inv.payment_amount_cents)) / 100, saldo: Math.round(Math.abs(inv.balance_cents)) / 100 });
+    }
   }
-  for (const i of invoices) {
-    const c = CICLOS[`${i.cartao} ${i.vence}`];
-    if (c) { if (c.inicio) i.inicio = c.inicio; if (c.fim) i.fim = c.fim; if (c.vence) i.vence = c.vence; }
-  }
-  const invoiceFor = (t: OrganizzeTransaction) => { const cid = t.credit_card_id || t.account_id; return invoices.find((i) => i.cartao_id === cid && t.date >= i.inicio && t.date <= i.fim); };
+  // O item pertence a fatura que o Organizze diz (credit_card_invoice_id); a data e so para o caso de faltar o campo.
+  const invoiceFor = (t: OrganizzeTransaction) => {
+    const cid = t.credit_card_id || t.account_id;
+    return invoices.find((i) => i.cartao_id === cid && i.id === t.credit_card_invoice_id) || invoices.find((i) => i.cartao_id === cid && t.date >= i.inicio && t.date <= i.fim);
+  };
 
   // Lancamentos detalhados.
   const rows = txs.map((t) => {
@@ -100,8 +92,8 @@ export async function exportPainel(outDir: string, today = new Date().toISOStrin
 
   const faturas = invoices.filter((i) => i.valor > 0 || i.vence >= addMonths(today.slice(0, 7), -1) + "-01").map((i) => {
     const itens = rows.filter((r) => r.fatura === `${i.cartao} ${i.vence}`);
-    const valor = RECALCULA.has(i.cartao) && i.vence >= "2026-10-01" ? Math.round(-itens.reduce((a, r) => a + Math.round(r.valor * 100), 0)) / 100 : i.valor;
-    return { cartao: i.cartao, vence: i.vence, inicio: i.inicio, fim: i.fim, valor, pago: i.pago, itens: itens.length, situacao: i.vence < today ? "vencida" : "em aberto" };
+    const situacao = i.saldo === 0 && i.valor > 0 ? "paga" : i.vence < today ? "vencida" : "em aberto";
+    return { cartao: i.cartao, vence: i.vence, vence_real: i.vence_real, inicio: i.inicio, fim: i.fim, valor: i.valor, pago: i.pago, saldo: i.saldo, itens: itens.length, situacao };
   }).sort((a, b) => a.vence.localeCompare(b.vence) || a.cartao.localeCompare(b.cartao));
   writeFileSync(join(outDir, "faturas.json"), JSON.stringify(faturas), "utf8");
 
@@ -124,7 +116,7 @@ export async function exportPainel(outDir: string, today = new Date().toISOStrin
   // Vencimentos: faturas em aberto, contas fixas nao pagas e boletos previstos, do mes atual ate 3 meses a frente.
   const due: Array<Record<string, unknown>> = [];
   const horizonte = addMonths(today.slice(0, 7), 3) + "-31";
-  for (const f of faturas) if (f.vence >= today && f.vence <= horizonte && f.valor > 0) due.push({ data: f.vence, descricao: `Fatura ${f.cartao}`, origem: `cartão ${f.cartao}`, tipo: "fatura de cartão", valor: f.valor, periodo: `${f.inicio} a ${f.fim}`, situacao: "em aberto" });
+  for (const f of faturas) if (f.vence >= today && f.vence <= horizonte && f.saldo > 0) due.push({ data: f.vence, descricao: `Fatura ${f.cartao}`, origem: `cartão ${f.cartao}`, tipo: "fatura de cartão", valor: f.saldo, periodo: `${f.inicio} a ${f.fim}`, situacao: "em aberto" });
   for (const t of txs) {
     if (t.paid || isCard(t) || t.amount_cents >= 0 || t.date < today || t.date > horizonte) continue;
     due.push({ data: t.date, descricao: t.description, origem: where(t), tipo: t.recurring ? "conta fixa" : "conta a pagar", valor: Math.round(-t.amount_cents) / 100, periodo: "", situacao: "a pagar" });

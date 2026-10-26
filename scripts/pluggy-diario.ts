@@ -11,7 +11,8 @@
  *
  * Uso: npx tsx scripts/pluggy-diario.ts [pasta do painel] [--ensaio]
  * Com --ensaio nada e gravado no Organizze; a exportacao roda do mesmo jeito.
- * Saida: um resumo em JSON na ultima linha (RESUMO {...}).
+ * Saida: um resumo em JSON na ultima linha (RESUMO {...}); "lancamentos" traz uma linha por item novo:
+ *   data | valor | descricao | conta ou cartao | categoria
  */
 import { config } from "../src/config.js";
 import { openDatabase } from "../src/repositories/db.js";
@@ -24,6 +25,7 @@ import { Categorizer } from "../src/services/categorizer.js";
 import { PluggyApiService } from "../src/services/pluggy-api.js";
 import { PluggySyncService } from "../src/services/pluggy-sync.js";
 import { exportPainel } from "./painel-export.js";
+import { faturaRealPara } from "./ciclos-cartoes.js";
 
 const START_DATE = process.env.PLUGGY_START_DATE || "2026-07-25";
 const args = process.argv.slice(2);
@@ -48,7 +50,19 @@ const service = new PluggySyncService(
 );
 const result = await service.sync({ chatId: config.pluggy.notifyChatId ?? config.allowedTelegramUserIds[0] ?? 0 });
 
-const resumo = { data: new Date().toISOString().slice(0, 10), ensaio, contas: result.accounts, novas: result.candidates, duplicadas: 0, lancadas: 0, sem_categoria: 0, ifood: 0, erros: result.errors.map((e) => `${e.scope}: ${e.message}`), sem_mapeamento: result.unmapped.map((u) => `${u.itemName} ${u.name}`), lancamentos: [] as string[] };
+const resumo = { data: new Date().toISOString().slice(0, 10), ensaio, contas: result.accounts, novas: result.candidates, duplicadas: 0, lancadas: 0, sem_categoria: 0, ifood: 0, movidos: 0, erros: result.errors.map((e) => `${e.scope}: ${e.message}`), sem_mapeamento: result.unmapped.map((u) => `${u.itemName} ${u.name}`), lancamentos: [] as string[] };
+
+// Cartoes cujo ciclo real difere do cadastrado: move o item novo para a fatura certa (ver scripts/ciclos-cartoes.ts).
+const faturasPorCartao = new Map<number, Array<{ id: number; date: string }>>();
+async function moveParaFaturaReal(cardId: number, txId: number, faturaAtual: number | undefined, date: string): Promise<void> {
+  const card = catalog.creditCards.find((c) => c.id === cardId); if (!card) return;
+  const alvo = faturaRealPara(card.name, date); if (!alvo) return;
+  if (!faturasPorCartao.has(cardId)) faturasPorCartao.set(cardId, await organizze.listCreditCardInvoices(cardId, { start_date: "2026-06-01", end_date: "2027-06-30" }));
+  const fatura = faturasPorCartao.get(cardId)!.find((f) => f.date === alvo);
+  if (!fatura || fatura.id === faturaAtual) return;
+  try { await organizze.updateTransaction(txId, { credit_card_invoice_id: fatura.id }); resumo.movidos += 1; }
+  catch (e) { resumo.erros.push(`nao moveu #${txId} para a fatura ${alvo}: ${(e as Error).message.slice(0, 80)}`); }
+}
 
 // Processa o lote de hoje e tambem itens de lotes antigos que ficaram sem decisao (status local "batched").
 const batchIds = (db.prepare("SELECT DISTINCT batch_id FROM pluggy_transactions WHERE status = 'batched' AND batch_id IS NOT NULL").all() as Array<{ batch_id: string }>).map((r) => r.batch_id);
@@ -68,12 +82,14 @@ for (const batch of batches) {
     if (lanches && /ifood|ifd\*/i.test(tx.description || "")) { category = lanches; resumo.ifood += 1; }
     if (!category) { category = naoIdentificado; resumo.sem_categoria += 1; }
     if (!tx.description || tx.amount_cents === undefined || !tx.date || (!tx.account_id && !tx.credit_card_id)) { resumo.erros.push(`sem dados para lancar: ${pluggyId}`); continue; }
-    const linha = `${tx.date} ${(tx.amount_cents / 100).toFixed(2)} ${tx.description} -> ${category.name}`;
+    const conta = tx.credit_card_name ? `cartao ${tx.credit_card_name}` : tx.account_name ? `conta ${tx.account_name}` : "conta ?";
+    const linha = `${tx.date} | ${(tx.amount_cents / 100).toFixed(2)} | ${tx.description} | ${conta} | ${category.name}`;
     resumo.lancamentos.push(linha);
     if (ensaio) continue;
     try {
       const created = await organizze.createTransaction({ description: tx.description, amount_cents: tx.amount_cents, date: tx.date, paid: true, account_id: tx.account_id, credit_card_id: tx.credit_card_id, category_id: category.id, notes: tx.notes });
       pluggyRepo.markImported(pluggyId, created.id);
+      if (tx.credit_card_id) await moveParaFaturaReal(tx.credit_card_id, created.id, created.credit_card_invoice_id ?? undefined, tx.date);
       c.status = "imported"; c.reason = `Importado no backend: #${created.id}`; c.matched_transaction_id = created.id;
       if (category.id !== naoIdentificado.id) learning.learn({ ...tx, category_id: category.id, category_name: category.name });
       resumo.lancadas += 1;

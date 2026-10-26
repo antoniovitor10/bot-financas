@@ -7,7 +7,8 @@ Bot de Telegram (TypeScript, telegraf, better-sqlite3) que interpreta lançament
 O Vitor nao usa mais o bot do Telegram. O que esta em uso:
 
 - `scripts/pluggy-diario.ts`: rotina diaria (tarefa agendada no app do Claude, 8h) que le a Pluggy, lanca o que e novo no Organizze por regras (duplicado fora, iFood em "Lanches e besteiras", categoria sugerida, senao "Não identificado") e regrava `data/painel/*.json`.
-- `scripts/painel-export.ts`: exporta do Organizze os dados do Painel das Financas (artifact Dashboard https://claude.ai/artifact/PkzscexSk4yztKixYtrVgF). Ciclos de fatura corrigidos e boletos previstos ficam em CICLOS e PREVISTOS nesse arquivo.
+- `scripts/painel-export.ts`: exporta do Organizze os dados do Painel das Financas (artifact Dashboard https://claude.ai/artifact/PkzscexSk4yztKixYtrVgF). Os valores de fatura sao os do Organizze (faturas de ago a out/2026 conferidas com os extratos em 25/10). Boletos previstos ficam em PREVISTOS.
+- `scripts/ciclos-cartoes.ts`: ciclos reais de PicPay, Nubank e Mercado Pago que diferem do fechamento cadastrado; a rotina diaria move itens novos para a fatura certa com eles.
 - `scripts/pluggy-import-decisoes.ts`: aplica decisoes de uma revisao manual (pasta de JSON) no Organizze.
 - `docs/PLANO-PLUGGY.md`: fatos da API da Pluggy e licoes da primeira carga.
 

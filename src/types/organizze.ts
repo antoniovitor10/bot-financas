@@ -62,6 +62,8 @@ export interface OrganizzeTransactionCreatePayload {
 }
 
 export interface OrganizzeTransactionUpdatePayload extends Partial<OrganizzeTransactionCreatePayload> {
+  /** Move o item para outra fatura do mesmo cartao sem mudar a data. */
+  credit_card_invoice_id?: number;
   update_future?: boolean;
   update_all?: boolean;
 }
